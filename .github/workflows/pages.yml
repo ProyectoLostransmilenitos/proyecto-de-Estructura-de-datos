@@ -23,6 +23,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Preparar archivos
+        run: |
+          mkdir -p public
+          cp -r front/* public/
+          cp -r datos public/datos
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -30,7 +36,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './front'
+          path: './public'
           
       - name: Deploy to GitHub Pages
         id: deployment
