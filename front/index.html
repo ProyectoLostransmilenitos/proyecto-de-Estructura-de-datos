@@ -115,7 +115,8 @@ body{backdrop-filter:none}.card{backdrop-filter:blur(6px)}.it9{cursor:pointer}.i
  <div class="card"><h3>Estaciones entre dos nombres</h3><p class="sub">En orden alfabético, solo abiertas.</p>
   <div class="row"><div class="col"><label>Desde</label><div id="d3"></div></div><div class="col"><label>Hasta</label><div id="h3"></div></div><button class="b" id="b3">Listar</button></div><div class="out chips" id="o3"></div></div>
  <div class="card"><h3>Las más transitadas</h3><p class="sub">Estaciones abiertas por donde pasan más buses al día.</p>
-  <div class="row"><div style="width:160px"><label>Cuántas</label><select id="k6"><option>5</option><option selected>10</option><option>20</option><option>30</option></select></div></div><div class="out" id="o6"></div></div>
+  <div class="row"><div style="width:160px"><label>Cuántas</label><select id="k6"><option>5</option><option selected>10</option><option>20</option><option>30</option></select></div></div><div class="out" id="o6"></div>
+  <div class="row" style="margin-top:14px"><div class="col"><label>Buscar estación</label><input id="q6" list="dl6" placeholder="Escribe el nombre de la estación" autocomplete="off"><datalist id="dl6"></datalist></div><button class="b" id="b6">Ver</button></div><div class="out" id="c6"></div></div>
 </section>
 <section id="h" class="on"><div class="card"><h3>¿Qué quieres hacer?</h3><p class="sub">Elige una sección. Siempre puedes volver con 🏠 Inicio o tocando el título.</p>
 <div class="home"><div class="hc" data-go="v"><span>🧭</span><b>Planear viaje</b><small>Elige origen y destino y mira la ruta en el mapa</small></div><div class="hc" data-go="u"><span>🚌</span><b>Buses</b><small>Busca tu ruta por número: paradas, horarios y trazado</small></div><div class="hc" data-go="b"><span>⏱</span><b>¿Cuándo pasa?</b><small>Próximos buses en una estación</small></div><div class="hc" data-go="e"><span>🚏</span><b>Estaciones</b><small>Buscar, listar por nombre y ranking</small></div><div class="hc" data-go="o"><span>🛠</span><b>Administrar red</b><small>Cerrar, reabrir, editar rutas y deshacer</small></div><div class="hc" data-go="f"><span>👥</span><b>Hora pico</b><small>Simula la fila de abordaje</small></div><div class="hc" data-go="p"><span>📊</span><b>Rendimiento</b><small>Mide el motor con redes crecientes</small></div><div class="hc" data-go="w"><span>🎬</span><b>TransMi Wrapped</b><small>Un recorrido narrativo por los datos de la red</small></div></div></div></section>
@@ -207,7 +208,7 @@ let T;const toast=(m,ok=true)=>{const t=$('#toast');t.textContent=m;t.style.bord
 const guard=f=>async(...a)=>{try{await f(...a)}catch(e){toast(e.message||'Error',false)}};
 let ABI=[],AB=new Set(),TODAS=[],RUTAS=[],PAR={},rev=false;
 const cerradas=()=>TODAS.filter(x=>!AB.has(x));
-async function abiertas(){ABI=await api('autocompletar',{prefijo:'',k:100000});AB=new Set(ABI);const s=new Set(ABI);for(const r in PAR)PAR[r].forEach(x=>s.add(x));TODAS=[...s].sort();if(typeof COORD!=='undefined'&&COORD)pintarPts();if(typeof c5a!=='undefined'&&c5a.get()&&c5z.get())plan()}
+async function abiertas(){ABI=await api('autocompletar',{prefijo:'',k:100000});AB=new Set(ABI);const s=new Set(ABI);for(const r in PAR)PAR[r].forEach(x=>s.add(x));TODAS=[...s].sort();llenaDl6();if(typeof COORD!=='undefined'&&COORD)pintarPts();if(typeof c5a!=='undefined'&&c5a.get()&&c5z.get())plan()}
 async function todasRutas(){await Promise.all(RUTAS.map(async r=>PAR[r]=await api('recorrido',{ruta:r})))}
 function combo(id,fn,ph,pick){const b=$('#'+id);b.className='combo';b.innerHTML='<input autocomplete="off" placeholder="'+ph+'"><div class="lista"></div>';const i=b.firstChild,l=b.lastChild;
  const pintar=()=>{const q=norm(i.value),a=fn().filter(x=>x.includes(q)).slice(0,80);l.innerHTML=a.length?a.map(x=>'<div>'+esc(x)+'</div>').join(''):'<em>Sin coincidencias</em>';l.style.display='block'};
@@ -229,6 +230,12 @@ $('#b3').onclick=guard(async()=>{const a=await api('rango',{desde:need(c3d.get()
 /* R6 */
 const ranking=guard(async()=>{const a=await api('ranking',{k:$('#k6').value}),m=a.length?a[0][1]:1;$('#o6').innerHTML=a.map((x,i)=>'<div class="barra"><span>'+(i+1)+'. '+esc(x[0])+'</span><i style="width:'+Math.max(4,x[1]/m*60)+'%"></i><b>'+x[1]+'</b></div>').join('')});
 $('#k6').onchange=ranking;
+const llenaDl6=()=>{$('#dl6').innerHTML=TODAS.map(s=>'<option value="'+esc(s)+'">').join('')};
+const buscarConteo=guard(async()=>{$('#c6').innerHTML='';const n=$('#q6').value.trim().toUpperCase();if(!n)throw new Error('Escribe el nombre de una estación');const r=await api('conteo',{nombre:n});if(!r)throw new Error('Esa estación no existe en la red');
+ const txt=r.abierta?'<b>'+esc(r.nombre)+'</b>: <b>'+r.buses+'</b> buses al día, puesto <b>'+r.puesto+'</b> de '+r.abiertas+' estaciones abiertas.':'<b>'+esc(r.nombre)+'</b> está cerrada: '+r.buses+' buses al día en el horario, pero no cuenta en el ranking.';
+ $('#c6').innerHTML='<p class="mut" style="margin:6px 0">'+txt+'</p><p class="mut" style="font-size:12px">Medido en buses al día, no en personas: los datos no tienen cantidad de pasajeros.</p>'});
+$('#b6').onclick=buscarConteo;
+$('#q6').onkeydown=e=>{if(e.key==='Enter')buscarConteo()};
 /* Próximo bus: todas las rutas de la estación */
 const ahora=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
 const bus=guard(async()=>{const e=c4.get(),o=$('#o4');if(!e){o.innerHTML='<p class="mut">Elige una estación.</p>';return}
