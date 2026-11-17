@@ -8,6 +8,21 @@ python front/app.py
 ```
 Abre http://127.0.0.1:8000 (puerto distinto: `python front/app.py 8080`).
 
+En **GitHub Pages**, el workflow genera `network.json` a partir de los CSV y publica un adaptador JavaScript sin dependencias. La página lo usa automáticamente cuando no encuentra la API de Python. Permite consultar estaciones, planear viajes, ver buses y horarios, editar la red y simular la fila. Los cambios de la red se mantienen durante esa sesión de la página; las estaciones añadidas se restauran con el almacenamiento local que ya usa la interfaz.
+
+La pestaña **Rendimiento** mide el motor de Python y requiere arrancar la aplicación localmente con el comando anterior. GitHub Pages muestra esta indicación en lugar de intentar ejecutar esas mediciones.
+
+Para comprobar la versión estática antes de publicar:
+
+```sh
+mkdir -p /tmp/transmilenio-pages
+cp front/index.html front/static-api.mjs /tmp/transmilenio-pages/
+python front/export_static.py /tmp/transmilenio-pages/network.json
+python -m http.server 8080 --directory /tmp/transmilenio-pages
+```
+
+Abre http://127.0.0.1:8080. Al publicar los cambios, espera que termine el workflow de Pages y recarga la página.
+
 Otros comandos:
 - Pruebas: `python -m unittest discover -s tests -v`
 - Revisar que `motor/` no use nada prohibido: `python verificar_prohibidos.py`

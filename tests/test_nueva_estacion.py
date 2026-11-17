@@ -57,15 +57,16 @@ class API(unittest.TestCase):
     def setUpClass(cls):
         import app
         from http.server import ThreadingHTTPServer
-        cls.srv = ThreadingHTTPServer(("127.0.0.1", 8765), app.H)
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), app.H)
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
 
     @classmethod
     def tearDownClass(cls):
         cls.srv.shutdown()
+        cls.srv.server_close()
 
     def call(self, p, body=None):
-        u = "http://127.0.0.1:8765/api/" + p
+        u = "http://127.0.0.1:%s/api/" % self.srv.server_port + p
         rq = urllib.request.Request(u, data=json.dumps(body).encode() if body is not None else None)
         return json.loads(urllib.request.urlopen(rq).read())
 

@@ -203,7 +203,18 @@ function calcPersonal(P,nEst){const V=P.viajes||[],M=P.visitas||[],cnt=a=>{const
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
-async function api(p,q={},post=false){const r=await fetch('/api/'+p+(post?'':'?'+new URLSearchParams(q)),post?{method:'POST',body:JSON.stringify(q)}:{});const j=await r.json();if(!r.ok)throw new Error(j.error);return j}
+let staticAPI;
+async function api(p,q={},post=false){
+ if(staticAPI)return (await staticAPI)(p,q,post);
+ const r=await fetch('/api/'+p+(post?'':'?'+new URLSearchParams(q)),post?{method:'POST',body:JSON.stringify(q)}:{});
+ if(!(r.headers.get('Content-Type')||'').includes('application/json')){
+  if(!r.ok&&r.status!==404&&r.status!==405)throw new Error('No se pudo consultar la red (HTTP '+r.status+').');
+  staticAPI=staticAPI||import('./static-api.mjs').then(m=>m.loadStaticAPI());
+  return (await staticAPI)(p,q,post);
+ }
+ let j;try{j=await r.json()}catch(e){throw new Error('La API devolvió una respuesta JSON inválida.');}
+ if(!r.ok)throw new Error(j.error||'No se pudo consultar la red.');return j;
+}
 let T;const toast=(m,ok=true)=>{const t=$('#toast');t.textContent=m;t.style.borderColor=ok?'#34d399':'#f87171';t.classList.add('v');clearTimeout(T);T=setTimeout(()=>t.classList.remove('v'),2600)};
 const guard=f=>async(...a)=>{try{await f(...a)}catch(e){toast(e.message||'Error',false)}};
 let ABI=[],AB=new Set(),TODAS=[],RUTAS=[],PAR={},rev=false;
@@ -258,13 +269,13 @@ $('#t4').value=ahora();$('#t4').onchange=bus;
 $('#ej4').onclick=e=>{if(e.target.dataset.e){c4.firstChild.value=e.target.dataset.e;bus()}};
 /* Planear viaje automático */
 const SKEL_PLAN='<div class="skel" aria-busy="true" aria-label="Calculando ruta"><div class="sk sk-h"></div>'+[0,1,2,3].map(i=>'<div class="sk-stop"><i></i><div class="sk" style="width:'+(60+i*9)%100+'%"></div></div>').join('')+'<div class="sk sk-card"></div><div class="sk sk-card short"></div></div>';
-const plan=guard(async()=>{const o=c5a.get(),d=c5z.get();if(!o||!d)return;$('#o5').innerHTML=SKEL_PLAN;const v=await api('viaje',{origen:o,destino:d});let h='';
+const plan=guard(async()=>{const o=c5a.get(),d=c5z.get();if(!o||!d)return;$('#o5').innerHTML=SKEL_PLAN;try{const v=await api('viaje',{origen:o,destino:d});let h='';
  if(!v)h='<span class="badge mal">No hay ninguna ruta disponible entre estas dos estaciones con las estaciones abiertas. Si cerraste alguna en el camino, ábrela o elige otro destino.</span>';
  else{const p=await api('proximo_bus',{estacion:v.tramos[0][1],ruta:v.tramos[0][0],hora:ahora()});
   h='<p><b>'+(v.tipo=='directo'?'Viaje directo':v.transbordos.length+(v.transbordos.length==1?' transbordo':' transbordos')+': '+v.transbordos.map(esc).join(' → '))+'</b> · <span class="badge ok">'+v.paradas+' paradas</span></p>'+v.tramos.map((t,i)=>'<div class="tramo"><span class="mut">'+(i?'🔁 Cambia de ruta':'🟢 Empiezas aquí')+'</span><br>Sube en <b>'+esc(t[1])+'</b> · ruta <b>'+esc(t[0])+'</b> · bájate en <b>'+esc(t[2])+'</b></div>').join('')+'<p>'+(p?'🕒 Tu primer bus sale a las <b>'+p+'</b>':'<span class="mut">No hay más buses de la primera ruta hoy.</span>')+'</p>'}
  if(v&&v.tramos&&v.tramos.length){const T=v.tramos,cl=[['🟢 Origen','#34d399',T[0][1]]].concat(T.slice(0,-1).map(t=>['🔁 Transbordo','#facc15',t[2]])).concat([['🔴 Destino','#f87171',T[T.length-1][2]]]);h='<div class="chips claves">'+cl.map(x=>'<span style="border-color:'+x[1]+'">'+x[0]+': '+esc(x[2])+'</span>').join('')+'</div>'+h}
  if(v&&v.tramos&&v.tramos.length){const sin=sinTrazo(v.tramos);if(sin.length)h+='<p class="mut">ℹ '+(sin.length==1?'La ruta '+esc(sin[0])+' no aparece dibujada en el mapa':'Las rutas '+sin.map(esc).join(', ')+' no aparecen dibujadas en el mapa')+', así que ese tramo se muestra en línea recta entre paradas.</p>'}
- if(v&&v.cruza_cerrada)h='<p class="mut">⚠ Este recorrido pasa por una estación cerrada: el bus pasa, pero no puedes subir, bajar ni transbordar ahí.</p>'+h;$('#o5').innerHTML=h;if(document.body.dataset.t=='v')trazo(v?v.tramos:[]);if(v){const b=document.createElement('button');b.className='b s';b.id='regv';b.textContent='✔ Registrar como viaje realizado';b.onclick=()=>abrirRV({o,d,t:v.tramos});$('#o5').appendChild(b)}});
+ if(v&&v.cruza_cerrada)h='<p class="mut">⚠ Este recorrido pasa por una estación cerrada: el bus pasa, pero no puedes subir, bajar ni transbordar ahí.</p>'+h;$('#o5').innerHTML=h;if(document.body.dataset.t=='v')trazo(v?v.tramos:[]);if(v){const b=document.createElement('button');b.className='b s';b.id='regv';b.textContent='✔ Registrar como viaje realizado';b.onclick=()=>abrirRV({o,d,t:v.tramos});$('#o5').appendChild(b)}}catch(e){$('#o5').innerHTML='<span class="badge mal">'+esc(e.message||'No se pudo calcular el viaje.')+'</span>';throw e}});
 $('#sw').onclick=()=>{const a=c5a.get(),z=c5z.get();c5a.firstChild.value=z;c5z.firstChild.value=a;plan()};
 $('#ej').onclick=e=>{if(e.target.dataset.a){c5a.firstChild.value=e.target.dataset.a;c5z.firstChild.value=e.target.dataset.z;plan()}};
 /* R7 */

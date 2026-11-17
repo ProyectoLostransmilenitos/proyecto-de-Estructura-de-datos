@@ -29,6 +29,7 @@ jobs:
           mkdir -p public
           cp -r front/* public/
           cp -r datos public/datos
+          python3 front/export_static.py public/network.json
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
