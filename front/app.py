@@ -96,6 +96,7 @@ GET = {
     "proximo_bus": lambda q: red.proximo_bus(p(q, "estacion"), p(q, "ruta"), p(q, "hora")),
     "viaje": lambda q: red.viaje(p(q, "origen"), p(q, "destino")),
     "ranking": lambda q: red.ranking(int(p(q, "k", "10"))),
+    "conteo": lambda q: red.conteo(p(q, "nombre")),
     "recorrido": lambda q: red.recorrido(p(q, "ruta"), p(q, "reves") == "1"),
     "rutas": lambda q: RUTAS,
     "wrapped": lambda q: WRAPPED,
