@@ -78,4 +78,4 @@ def leer_horarios(carpeta):
         if not esta_ordenada(h[clave]):
             h[clave] = ordenar(h[clave])
     return h
-```[cite: 3]
+
