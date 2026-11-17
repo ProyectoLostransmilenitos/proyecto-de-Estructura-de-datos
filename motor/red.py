@@ -1,4 +1,4 @@
-"""Clase Red: contrato del motor (R1-R9)."""
+"""Clase Red: contrato del motor (R1-R9) sin dict ni set internos."""
 from .estructuras import AVL, ListaDoble, Pila
 from .algoritmos import primero_mayor_o_igual
 from . import carga
@@ -10,7 +10,7 @@ class _Ruta:
     def __init__(self, id_):
         self.id = id_
         self.lista = ListaDoble()       # paradas en orden (R7)
-        self.nodos = {}                 # estacion -> nodo de la lista (acceso O(1))
+        self.nodos = AVL()              # estacion -> nodo de la lista
 
 
 class Red:
@@ -19,88 +19,90 @@ class Red:
         rutas = carga.leer_rutas(carpeta)
         self._horarios = carga.leer_horarios(carpeta)
 
-        self._abierta = {}              # R1: tabla hash nombre -> bool
-        self._buses = {}                # nombre -> buses al dia
-        self._rutas_de = {}             # estacion -> {ruta: True} (rutas que pasan)
+        self._abierta = AVL()           # R1: nombre -> bool
+        self._buses = AVL()             # nombre -> buses al dia
+        self._rutas_de = AVL()          # estacion -> AVL(ruta -> True)
         self._arbol_nombres = AVL()     # R2/R3: estaciones abiertas por nombre
         self._arbol_ranking = AVL()     # R6: estaciones abiertas por (-buses, nombre)
-        self._rutas = {}
+        self._rutas = AVL()             # id_ -> _Ruta
         self._deshacer = Pila()         # R9
         self._rehacer = Pila()
-        self._nuevas = set()            # estaciones añadidas en runtime (las unicas que se pueden eliminar)
+        self._nuevas = AVL()            # estaciones añadidas en runtime
 
         for nombre in nombres:
-            self._abierta[nombre] = True
-            self._buses[nombre] = 0
-            self._rutas_de[nombre] = {}
+            self._abierta.insertar(nombre, True)
+            self._buses.insertar(nombre, 0)
+            self._rutas_de.insertar(nombre, AVL())
 
-        for id_ in rutas:
+        for id_, lista_estaciones in rutas.recorrer_desde(None):
             ruta = _Ruta(id_)
-            for est in rutas[id_]:
-                if est not in self._abierta or est in ruta.nodos:
+            for est in lista_estaciones:
+                if self._abierta.buscar(est) is None or ruta.nodos.buscar(est) is not None:
                     continue  # estacion desconocida o repetida en la ruta
-                ruta.nodos[est] = ruta.lista.agregar_al_final(est)
-                self._rutas_de[est][id_] = True
-                self._buses[est] += self._pasan(id_, est)
-            self._rutas[id_] = ruta
+                ruta.nodos.insertar(est, ruta.lista.agregar_al_final(est))
+                self._rutas_de.buscar(est).insertar(id_, True)
+                buses_actual = self._buses.buscar(est)
+                self._buses.insertar(est, buses_actual + self._pasan(id_, est))
+            self._rutas.insertar(id_, ruta)
 
         for nombre in nombres:
             self._arbol_nombres.insertar(nombre, True)
-            self._arbol_ranking.insertar((-self._buses[nombre], nombre), True)
+            self._arbol_ranking.insertar((-self._buses.buscar(nombre), nombre), True)
 
     # ------------------------------------------------------------ auxiliares
     def _pasan(self, ruta, estacion):
-        h = self._horarios.get((ruta, estacion))
+        h = self._horarios.buscar((ruta, estacion))
         return len(h) if h is not None else 0
 
     def _ajustar_buses(self, estacion, delta):
-        antes = self._buses[estacion]
-        self._buses[estacion] = antes + delta
-        if self._abierta[estacion]:
+        antes = self._buses.buscar(estacion)
+        nuevo = antes + delta
+        self._buses.insertar(estacion, nuevo)
+        if self._abierta.buscar(estacion) is True:
             self._arbol_ranking.eliminar((-antes, estacion))
-            self._arbol_ranking.insertar((-(antes + delta), estacion), True)
+            self._arbol_ranking.insertar((-nuevo, estacion), True)
 
     def crear_estacion(self, nombre):
-        """Extra (fuera del contrato): registra una estacion nueva, abierta y sin rutas. O(log n)."""
-        if nombre == "" or nombre in self._abierta:
+        """Extra (fuera del contrato): registra una estacion nueva, abierta y sin rutas."""
+        if nombre == "" or self._abierta.buscar(nombre) is not None:
             return False
-        self._abierta[nombre] = True
-        self._buses[nombre] = 0
-        self._rutas_de[nombre] = {}
+        self._abierta.insertar(nombre, True)
+        self._buses.insertar(nombre, 0)
+        self._rutas_de.insertar(nombre, AVL())
         self._arbol_nombres.insertar(nombre, True)
         self._arbol_ranking.insertar((0, nombre), True)
-        self._nuevas.add(nombre)
+        self._nuevas.insertar(nombre, True)
         return True
 
     def eliminar_estacion(self, nombre):
-        """Extra: elimina SOLO una estacion creada con crear_estacion (la base original no se toca).
-        La saca de todas sus rutas y de los arboles; vacia el historial de deshacer/rehacer. O(r log n)."""
-        if nombre not in self._nuevas:
+        """Extra: elimina SOLO una estacion creada con crear_estacion."""
+        if self._nuevas.buscar(nombre) is None:
             return False
-        for ruta in list(self._rutas_de[nombre]):
+        rutas_est = [r for r, _ in self._rutas_de.buscar(nombre).recorrer_desde(None)]
+        for ruta in rutas_est:
             self._quitar(ruta, nombre)
-        if self._abierta[nombre]:
+        if self._abierta.buscar(nombre) is True:
             self._arbol_nombres.eliminar(nombre)
-            self._arbol_ranking.eliminar((-self._buses[nombre], nombre))
-        del self._abierta[nombre]
-        del self._buses[nombre]
-        del self._rutas_de[nombre]
-        self._nuevas.discard(nombre)
+            self._arbol_ranking.eliminar((-self._buses.buscar(nombre), nombre))
+        self._abierta.eliminar(nombre)
+        self._buses.eliminar(nombre)
+        self._rutas_de.eliminar(nombre)
+        self._nuevas.eliminar(nombre)
         self._deshacer.vaciar()
         self._rehacer.vaciar()
         return True
 
     # ------------------------------------------------------------ R1
     def estado(self, nombre):
-        """'abierta', 'cerrada' o 'no existe'. O(1)."""
-        a = self._abierta.get(nombre)
+        """'abierta', 'cerrada' o 'no existe'."""
+        a = self._abierta.buscar(nombre)
         if a is None:
             return "no existe"
         return "abierta" if a else "cerrada"
 
     # ------------------------------------------------------------ R2
     def autocompletar(self, prefijo, k):
-        """Hasta k estaciones abiertas que empiezan por prefijo, en orden. O(log n + k)."""
+        """Hasta k estaciones abiertas que empiezan por prefijo, en orden."""
         res = []
         if k <= 0:
             return res
@@ -114,7 +116,7 @@ class Red:
 
     # ------------------------------------------------------------ R3
     def rango(self, desde, hasta):
-        """Abiertas con desde <= nombre <= hasta, en orden. O(log n + m)."""
+        """Abiertas con desde <= nombre <= hasta, en orden."""
         res = []
         if hasta < desde:
             return res
@@ -126,13 +128,13 @@ class Red:
 
     # ------------------------------------------------------------ R4
     def proximo_bus(self, estacion, ruta, hora):
-        """Primera hora de paso >= hora ('HH:MM'), como 'HH:MM', o None. O(log h)."""
-        if self._abierta.get(estacion) is not True:
+        """Primera hora de paso >= hora ('HH:MM'), como 'HH:MM', o None."""
+        if self._abierta.buscar(estacion) is not True:
             return None
-        r = self._rutas.get(ruta)
-        if r is None or estacion not in r.nodos:
+        r = self._rutas.buscar(ruta)
+        if r is None or r.nodos.buscar(estacion) is None:
             return None
-        horas = self._horarios.get((ruta, estacion))
+        horas = self._horarios.buscar((ruta, estacion))
         if horas is None:
             return None
         m = hora if isinstance(hora, int) else carga.minutos(hora)
@@ -143,34 +145,35 @@ class Red:
 
     # ------------------------------------------------------------ R5
     def viaje(self, origen, destino):
-        """Ruta con cualquier cantidad de transbordos. Prioridad:
-        1) menos transbordos, 2) no cruzar estaciones cerradas, 3) menos paradas.
-        Solo se sube, baja o transborda en estaciones abiertas. Devuelve dict o None (no hay ruta).
-        Busqueda por niveles de transbordo (BFS): el primer nivel con destino da el minimo de transbordos."""
-        if self._abierta.get(origen) is not True or self._abierta.get(destino) is not True:
+        """Ruta con cualquier cantidad de transbordos."""
+        if self._abierta.buscar(origen) is not True or self._abierta.buscar(destino) is not True:
             return None
         if origen == destino:
             return {"tipo": "directo", "tramos": [], "paradas": 0, "transbordo": None,
                     "transbordos": [], "cruza_cerrada": False}
-        info = {}        # (ruta, estacion_subida) -> [cruza, paradas, clave_padre, estacion_subida]
-        visto = set()
+
+        info = AVL()     # (ruta, estacion_subida) -> [cruza, paradas, clave_padre, estacion_subida]
+        visto = AVL()
         nivel = []
-        for ra in self._rutas_de[origen]:
+
+        for ra, _ in self._rutas_de.buscar(origen).recorrer_desde(None):
             k = (ra, origen)
-            info[k] = [False, 0, None, origen]
-            visto.add(k)
+            info.insertar(k, [False, 0, None, origen])
+            visto.insertar(k, True)
             nivel.append(k)
+
         while nivel:
             fin = None
             sig = []
             for k in nivel:
                 ruta, sube = k
-                cruza, paradas = info[k][0], info[k][1]
-                nodo = self._rutas[ruta].nodos[sube].sig
+                datos_k = info.buscar(k)
+                cruza, paradas = datos_k[0], datos_k[1]
+                nodo = self._rutas.buscar(ruta).nodos.buscar(sube).sig
                 while nodo is not None:
                     est = nodo.valor
                     nodo = nodo.sig
-                    if not self._abierta[est]:
+                    if self._abierta.buscar(est) is not True:
                         cruza = True
                         continue
                     paradas += 1
@@ -178,23 +181,24 @@ class Red:
                         if fin is None or (cruza, paradas) < (fin[0], fin[1]):
                             fin = (cruza, paradas, k)
                         break
-                    for rb in self._rutas_de[est]:
+                    for rb, _ in self._rutas_de.buscar(est).recorrer_desde(None):
                         if rb == ruta:
                             continue
                         nk = (rb, est)
-                        if nk in visto:
+                        if visto.buscar(nk) is not None:
                             continue
-                        previo = info.get(nk)
+                        previo = info.buscar(nk)
                         if previo is None or (cruza, paradas) < (previo[0], previo[1]):
                             if previo is None:
                                 sig.append(nk)
-                            info[nk] = [cruza, paradas, k, est]
+                            info.insertar(nk, [cruza, paradas, k, est])
+
             if fin is not None:
                 cruza, paradas, k = fin
                 cadena = []
                 while k is not None:
                     cadena.append(k)
-                    k = info[k][2]
+                    k = info.buscar(k)[2]
                 cadena.reverse()
                 tramos = []
                 for n, (ruta, sube) in enumerate(cadena):
@@ -204,14 +208,15 @@ class Red:
                 return {"tipo": "directo" if not trans else "transbordo", "tramos": tramos,
                         "paradas": paradas, "transbordo": trans[0] if trans else None,
                         "transbordos": trans, "cruza_cerrada": cruza}
+
             for nk in sig:
-                visto.add(nk)
+                visto.insertar(nk, True)
             nivel = sig
         return None
 
     # ------------------------------------------------------------ R6
     def ranking(self, k):
-        """k estaciones abiertas con mas buses al dia: [(nombre, buses)]. O(log n + k)."""
+        """k estaciones abiertas con mas buses al dia: [(nombre, buses)]."""
         res = []
         if k <= 0:
             return res
@@ -222,66 +227,66 @@ class Red:
         return res
 
     def conteo(self, nombre):
-        """Buses al dia de una estacion y su puesto entre las abiertas. O(log n + p)."""
-        if nombre not in self._buses:
+        """Buses al dia de una estacion y su puesto entre las abiertas."""
+        buses_est = self._buses.buscar(nombre)
+        if buses_est is None:
             return None
-        if not self._abierta[nombre]:
-            return {"nombre": nombre, "buses": self._buses[nombre], "abierta": False,
+        if self._abierta.buscar(nombre) is not True:
+            return {"nombre": nombre, "buses": buses_est, "abierta": False,
                     "puesto": None, "abiertas": len(self._arbol_nombres)}
         puesto = 0
         for (neg, otra), _ in self._arbol_ranking.recorrer_desde(None):
             puesto += 1
             if otra == nombre:
                 break
-        return {"nombre": nombre, "buses": self._buses[nombre], "abierta": True,
+        return {"nombre": nombre, "buses": buses_est, "abierta": True,
                 "puesto": puesto, "abiertas": len(self._arbol_nombres)}
 
     # ------------------------------------------------------------ R7
     def recorrido(self, ruta, al_reves=False):
-        """Paradas de la ruta (incluye cerradas), en un sentido o en el otro. O(L)."""
-        r = self._rutas.get(ruta)
+        """Paradas de la ruta (incluye cerradas), en un sentido o en el otro."""
+        r = self._rutas.buscar(ruta)
         if r is None:
             return []
         return list(r.lista.atras() if al_reves else r.lista.adelante())
 
     def _agregar(self, ruta, nueva, despues_de):
-        r = self._rutas.get(ruta)
-        if r is None or nueva not in self._abierta or nueva in r.nodos:
+        r = self._rutas.buscar(ruta)
+        if r is None or self._abierta.buscar(nueva) is None or r.nodos.buscar(nueva) is not None:
             return False
         ref = None
         if despues_de is not None:
-            ref = r.nodos.get(despues_de)
+            ref = r.nodos.buscar(despues_de)
             if ref is None:
                 return False
-        r.nodos[nueva] = r.lista.insertar_despues(ref, nueva)
-        self._rutas_de[nueva][ruta] = True
+        r.nodos.insertar(nueva, r.lista.insertar_despues(ref, nueva))
+        self._rutas_de.buscar(nueva).insertar(ruta, True)
         self._ajustar_buses(nueva, self._pasan(ruta, nueva))
         return True
 
     def _quitar(self, ruta, estacion):
         """-> (ok, estacion anterior en la ruta o None)."""
-        r = self._rutas.get(ruta)
+        r = self._rutas.buscar(ruta)
         if r is None:
             return False, None
-        nodo = r.nodos.get(estacion)
+        nodo = r.nodos.buscar(estacion)
         if nodo is None:
             return False, None
         anterior = nodo.ant.valor if nodo.ant is not None else None
         r.lista.quitar(nodo)
-        del r.nodos[estacion]
-        del self._rutas_de[estacion][ruta]
+        r.nodos.eliminar(estacion)
+        self._rutas_de.buscar(estacion).eliminar(ruta)
         self._ajustar_buses(estacion, -self._pasan(ruta, estacion))
         return True, anterior
 
     def agregar_parada(self, ruta, nueva, despues_de):
-        """Inserta `nueva` justo despues de `despues_de` (None = al inicio). O(1)."""
+        """Inserta `nueva` justo despues de `despues_de` (None = al inicio)."""
         if self._agregar(ruta, nueva, despues_de):
             self._registrar(("agregar", ruta, nueva, despues_de))
             return True
         return False
 
     def quitar_parada(self, ruta, estacion):
-        """O(1)."""
         ok, anterior = self._quitar(ruta, estacion)
         if ok:
             self._registrar(("quitar", ruta, estacion, anterior))
@@ -289,30 +294,28 @@ class Red:
 
     # ------------------------------------------------------------ R8
     def _cerrar(self, nombre):
-        if self._abierta.get(nombre) is not True:
+        if self._abierta.buscar(nombre) is not True:
             return False
-        self._abierta[nombre] = False
+        self._abierta.insertar(nombre, False)
         self._arbol_nombres.eliminar(nombre)
-        self._arbol_ranking.eliminar((-self._buses[nombre], nombre))
+        self._arbol_ranking.eliminar((-self._buses.buscar(nombre), nombre))
         return True
 
     def _reabrir(self, nombre):
-        if self._abierta.get(nombre) is not False:
+        if self._abierta.buscar(nombre) is not False:
             return False
-        self._abierta[nombre] = True
+        self._abierta.insertar(nombre, True)
         self._arbol_nombres.insertar(nombre, True)
-        self._arbol_ranking.insertar((-self._buses[nombre], nombre), True)
+        self._arbol_ranking.insertar((-self._buses.buscar(nombre), nombre), True)
         return True
 
     def cerrar(self, nombre):
-        """O(log n)."""
         if self._cerrar(nombre):
             self._registrar(("cerrar", nombre))
             return True
         return False
 
     def reabrir(self, nombre):
-        """O(log n)."""
         if self._reabrir(nombre):
             self._registrar(("reabrir", nombre))
             return True
@@ -321,7 +324,7 @@ class Red:
     # ------------------------------------------------------------ R9
     def _registrar(self, cambio):
         self._deshacer.apilar(cambio)
-        self._rehacer.vaciar()  # un cambio nuevo borra lo que habia para rehacer
+        self._rehacer.vaciar()
 
     def deshacer(self):
         c = self._deshacer.desapilar()
