@@ -1,6 +1,6 @@
 # Integrantes
 
-| Nombre |  |  |
+| Nombre |  | Requisitos |
 |---|---|---|
 | (1) | Daniel Felipe Avila Mendez |  |
 | (2) | Pablo Alejandro Alarcon Arevalo |  |
