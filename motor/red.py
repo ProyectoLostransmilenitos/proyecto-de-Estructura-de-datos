@@ -354,4 +354,4 @@ class Red:
             self._quitar(c[1], c[2])
         self._deshacer.apilar(c)
         return True
-```[cite: 6]
+
