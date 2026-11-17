@@ -1,8 +1,8 @@
 # Integrantes
 
-| Nombre |  | Requisitos |
-|---|---|---|
-| (1) | Daniel Felipe Avila Mendez |  |
-| (2) | Pablo Alejandro Alarcon Arevalo |  |
-| (3) | Johan Sebastian Buitrago Roncancio |  |
-| (4) | Juan Andres Lasso Arias |  |
+| Nombre | Requisitos |
+|---|---|
+|Daniel Felipe Avila Mendez |  |
+|Pablo Alejandro Alarcon Arevalo |  |
+|Johan Sebastian Buitrago Roncancio |  |
+|Juan Andres Lasso Arias |  |
