@@ -1,7 +1,8 @@
-"""Lectura de los tres CSV (solo modulo csv)."""
+"""Lectura de los tres CSV (solo modulo csv, sin dict ni set)."""
 import csv
 
 from .algoritmos import esta_ordenada, ordenar
+from .estructuras import AVL
 
 
 def _ruta_archivo(carpeta, nombre):
@@ -32,49 +33,55 @@ def formato(m):
 
 
 def leer_estaciones(carpeta):
-    vistas = {}
+    vistas = AVL()
+    resultado = []
     for fila in _filas(carpeta, "estaciones.csv"):
         nombre = fila[0].strip()
-        if nombre != "":
-            vistas[nombre] = True  # dict conserva orden y elimina repetidos
-    return list(vistas)
+        if nombre != "" and vistas.buscar(nombre) is None:
+            vistas.insertar(nombre, True)
+            resultado.append(nombre)
+    return resultado
 
 
 def leer_rutas(carpeta):
-    """-> dict ruta -> [estaciones en orden]."""
-    pares = {}
+    """-> AVL ruta -> [estaciones en orden]."""
+    pares = AVL()
     for fila in _filas(carpeta, "rutas.csv"):
         try:
             orden = int(fila[1])
         except ValueError:
             continue
         r = fila[0].strip()
-        if r not in pares:
-            pares[r] = []
-        pares[r].append((orden, fila[2].strip()))
-    rutas = {}
-    for r in pares:
-        lista = pares[r]
+        lista = pares.buscar(r)
+        if lista is None:
+            lista = []
+            pares.insertar(r, lista)
+        lista.append((orden, fila[2].strip()))
+
+    rutas = AVL()
+    for r, lista in pares.recorrer_desde(None):
         if not esta_ordenada(lista):
             lista = ordenar(lista)
-        rutas[r] = [e for _, e in lista]
+        rutas.insertar(r, [e for _, e in lista])
     return rutas
 
 
 def leer_horarios(carpeta):
-    """-> dict (ruta, estacion) -> [minutos ordenados]."""
-    h = {}
+    """-> AVL (ruta, estacion) -> [minutos ordenados]."""
+    h = AVL()
     for fila in _filas(carpeta, "horarios.csv"):
         try:
             m = minutos(fila[2])
         except (ValueError, IndexError):
             continue
         clave = (fila[0].strip(), fila[1].strip())
-        if clave in h:
-            h[clave].append(m)
+        lista = h.buscar(clave)
+        if lista is None:
+            h.insertar(clave, [m])
         else:
-            h[clave] = [m]
-    for clave in h:
-        if not esta_ordenada(h[clave]):
-            h[clave] = ordenar(h[clave])
+            lista.append(m)
+
+    for clave, lista in h.recorrer_desde(None):
+        if not esta_ordenada(lista):
+            h.insertar(clave, ordenar(lista))
     return h
